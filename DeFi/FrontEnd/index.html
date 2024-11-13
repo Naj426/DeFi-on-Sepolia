@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeFi</title>
+  <script src="https://unpkg.com/ethers@5.6.9/dist/ethers.umd.min.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #001f3d;
+      color: white;
+    }
+
+    h1 {
+      text-align: center;
+      color: cyan;
+      margin-top: 50px;
+    }
+
+    p {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      padding: 20px;
+    }
+
+    .button-column {
+      display: flex;
+      flex-direction: column;
+      gap: 0px;
+      align-items: stretch;
+    }
+
+    button {
+      padding: 15px;
+      font-size: 16px;
+      background-color: #1e2b47;
+      color: white;
+      border: 2px solid cyan;
+      border-radius: 5px;
+      cursor: pointer;
+      width: 67%;
+    }
+
+    button:hover {
+      background-color: #333;
+    }
+
+    button:disabled {
+      background-color: #555;
+      cursor: not-allowed;
+    }
+
+    input {
+      padding: 15px;
+      font-size: 16px;
+      border: 2px solid #00bcd4;
+      background-color: #1e2b47;
+      color: white;
+      width: 60%;
+      border-radius: 5px;
+    }
+
+    #distributeDividendsSection {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    #balance {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    #distributeDividendsSection {
+      display: none;
+    }
+
+    #depositSection {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: stretch;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>DeFi</h1>
+  <p>Connect your MetaMask wallet and invest Sepolia ETH into the contract.</p>
+
+  <div class="button-row">
+    <div class="button-column">
+      <input type="text" id="amount" placeholder="Enter amount in ETH" />
+      <button onclick="invest()">Invest</button>
+
+      <div id="depositSection" style="display: none;">
+        <input type="text" id="depositAmount" placeholder="Enter amount in ETH" />
+        <button onclick="deposit()">Deposit</button>
+      </div>
+    </div>
+
+    <div class="button-column">
+      <button onclick="getContractBalance()">Get Contract Balance</button>
+    </div>
+
+    <div class="button-column">
+      <input type="text" id="withdrawAmount" placeholder="Enter amount in ETH" />
+      <button onclick="withdraw()">Withdraw</button>
+    </div>
+
+    <div class="button-column" id="distributeDividendsSection">
+      <button id="distributeDividendsBtn" onclick="distributeDividends()" disabled>Distribute Dividends</button>
+    </div>
+  </div>
+
+  <div id="balance">Contract Balance: 0 ETH</div>
+
+  <script>
+    let userAddress;
+    let ownerAddress;
+
+    const contractAddress = "0x97a2cc557d2f648a33f8055ddc7bc3cbc831d7f5"; 
+    const contractABI = [
+      "function invest() public payable",
+      "function withdraw(uint256 amount) public",
+      "function getUserBalance() public view returns (uint256)",
+      "function distributeDividends() public",
+      "function getTotalBalance() public view returns (uint256)",
+      "function owner() public view returns (address)",
+      "function deposit() public payable"
+    ];
+
+    if (window.ethereum) {
+      async function connectMetaMask() {
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          userAddress = accounts[0];
+          return userAddress;
+        } catch (error) {
+          alert('Please allow MetaMask to connect.');
+        }
+      }
+
+      async function checkNetwork() {
+        const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+        if (chainId !== '0xaa36a7') {
+          alert('Please switch to the Sepolia test network in MetaMask');
+        }
+      }
+
+      async function init() {
+        await connectMetaMask();
+        if (userAddress) {
+          await checkNetwork();
+          await getOwner();
+        }
+      }
+
+      init();
+    } else {
+      alert("MetaMask is not installed.");
+    }
+
+    async function getOwner() {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+      
+      try {
+        ownerAddress = await contract.owner();
+        
+        if (userAddress.toLowerCase() === ownerAddress.toLowerCase()) {
+          document.getElementById("distributeDividendsBtn").disabled = false;
+          document.getElementById("distributeDividendsSection").style.display = "block";
+          document.getElementById("depositSection").style.display = "block";
+        }
+      } catch (error) {
+        console.error("Failed to get owner:", error);
+      }
+    }
+
+    async function invest() {
+      if (!userAddress) {
+        alert("Please connect your MetaMask wallet first.");
+        return;
+      }
+
+      const amount = document.getElementById("amount").value;
+      if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+        alert("Please enter a valid amount to invest.");
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      try {
+        const tx = await contract.invest({
+          value: ethers.utils.parseEther(amount)
+        });
+        await tx.wait();
+        alert("Investment successful!");
+        await getUserBalance();
+      } catch (error) {
+        alert("Investment failed.");
+      }
+    }
+
+    async function getContractBalance() {
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const contract = new ethers.Contract(contractAddress, contractABI, provider);
+      const balance = await contract.getTotalBalance();
+      
+      const balanceInEth = ethers.utils.formatEther(balance);
+      document.getElementById("balance").innerText = "Contract Balance: " + balanceInEth + " ETH";
+    }
+
+    async function withdraw() {
+      const amount = document.getElementById("withdrawAmount").value;
+      if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+        alert("Please enter a valid amount to withdraw.");
+        return;
+      }
+
+      if (!userAddress) {
+        alert("Please connect your MetaMask wallet first.");
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      try {
+        const userBalance = await contract.getUserBalance();
+        const withdrawAmountInWei = ethers.utils.parseEther(amount);
+        if (withdrawAmountInWei > userBalance) {
+          alert("Insufficient balance to withdraw.");
+          return;
+        }
+
+        const tx = await contract.withdraw(withdrawAmountInWei, {
+            gasLimit: 60000
+        });
+        
+        await tx.wait();
+        alert("Withdrawal successful!");
+      } catch (error) {
+        alert(`Withdrawal failed: ${error.message}`);
+      }
+    }
+
+    async function distributeDividends() {
+      if (!userAddress) {
+        alert("Please connect your MetaMask wallet first.");
+        return;
+      }
+
+      if (userAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
+        alert("You are not the contract owner.");
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      try {
+        const tx = await contract.distributeDividends();
+        await tx.wait();
+        alert("Dividends distributed successfully!");
+      } catch (error) {
+        alert(`Dividend distribution failed: ${error.message}`);
+      }
+    }
+
+    async function deposit() {
+      const depositAmount = document.getElementById("depositAmount").value;
+      if (!depositAmount || isNaN(depositAmount) || parseFloat(depositAmount) <= 0) {
+        alert("Please enter a valid deposit amount.");
+        return;
+      }
+
+      if (userAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
+        alert("You are not the contract owner.");
+        return;
+      }
+
+      const provider = new ethers.providers.Web3Provider(window.ethereum);
+      const signer = provider.getSigner();
+      const contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+      try {
+        const tx = await contract.deposit({
+          value: ethers.utils.parseEther(depositAmount)
+        });
+        await tx.wait();
+        alert("Deposit successful!");
+      } catch (error) {
+        alert(`Deposit failed: ${error.message}`);
+      }
+    }
+  </script>
+</body>
+</html>
